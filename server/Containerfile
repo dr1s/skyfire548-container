@@ -1,0 +1,116 @@
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV BOOST_ROOT=/opt/boost-1_91_0
+ENV OPENSSL_ROOT=/opt/openssl-4.0.0
+ENV LD_LIBRARY_PATH="${OPENSSL_ROOT}/lib64:${OPENSSL_ROOT}/lib:${LD_LIBRARY_PATH:-}"
+
+ARG SOURCE_COMMIT=""
+ARG BUILD_JOBS=4
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc-14 \
+        g++-14 \
+        cmake \
+        ninja-build \
+        git \
+        wget \
+        ca-certificates \
+        ccache \
+        perl \
+        pkg-config \
+        bzip2 \
+        libbz2-dev \
+        libreadline-dev \
+        zlib1g-dev \
+        default-libmysqlclient-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /skyfire548/build-deps \
+    && cd /skyfire548/build-deps \
+    && wget --quiet https://archives.boost.io/release/1.91.0/source/boost_1_91_0.tar.gz \
+    && tar -xzf boost_1_91_0.tar.gz \
+    && cd boost_1_91_0 \
+    && ./bootstrap.sh \
+    && ./b2 install --prefix="${BOOST_ROOT}" --with-headers -j"${BUILD_JOBS}" \
+    && rm -rf /skyfire548/build-deps/boost_1_91_0*
+
+RUN cd /skyfire548/build-deps \
+    && wget --quiet https://www.openssl.org/source/openssl-4.0.0.tar.gz \
+    && tar -xzf openssl-4.0.0.tar.gz \
+    && cd openssl-4.0.0 \
+    && ./Configure linux-x86_64 \
+      --prefix="${OPENSSL_ROOT}" \
+      --openssldir="${OPENSSL_ROOT}/ssl" \
+      shared \
+      enable-legacy \
+    && make -j"${BUILD_JOBS}" \
+    && make install_sw install_ssldirs \
+    && rm -rf /skyfire548
+
+ARG SOURCE_REPO="https://github.com/ProjectSkyfire/SkyFire_548.git"
+ARG SOURCE_BRANCH=main
+
+RUN git clone --depth 1 "${SOURCE_REPO}" --branch "${SOURCE_BRANCH}" /skyfire548 \
+    && rm -rf /skyfire548/modules/mod-example
+
+WORKDIR /skyfire548
+
+ARG CCACHE_CC=/usr/bin/gcc-14
+ARG CCACHE_CXX=/usr/bin/g++-14
+ARG CCACHE_DIR="/ccache"
+ARG CCACHE_MAXSIZE="5G"
+ARG CCACHE_SLOPPINESS="pch_defines,time_macros,include_file_mtime"
+ARG CCACHE_COMPILERCHECK="content"
+
+WORKDIR /skyfire548
+RUN --mount=type=cache,target=/ccache \
+    ccache -z \
+    && cmake -S . -B build -G Ninja \
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+        -DCMAKE_INSTALL_PREFIX=/opt/skyfire-server \
+        -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+        -DCMAKE_C_COMPILER="${CCACHE_CC}" \
+        -DCMAKE_CXX_COMPILER="${CCACHE_CXX}" \
+        -DBOOST_ROOT="${BOOST_ROOT}" \
+        -DOPENSSL_ROOT_DIR="${OPENSSL_ROOT}" \
+        -DSKYFIRE_BUILD_TESTS=OFF \
+        -DTOOLS=ON \
+        -DNOPCH=0 \
+    && cmake --build build -j"${BUILD_JOBS}" \
+    && cmake --install build \
+    && ccache -s \
+    && mv /opt/skyfire-server/etc /opt/skyfire-server/etc.dist \
+    && rm -rf /skyfire548/build
+
+FROM ubuntu:24.04 AS runtime
+
+ENV OPENSSL_ROOT=/opt/openssl-4.0.0
+ENV LD_LIBRARY_PATH="${OPENSSL_ROOT}/lib64:${OPENSSL_ROOT}/lib:${LD_LIBRARY_PATH:-}"
+
+RUN apt-get -y update \
+    && apt-get -y upgrade \
+    && apt-get -y --no-install-recommends install \
+        libmysqlclient-dev \
+        tini \
+        libreadline8t64 \
+    && rm -rf /var/lib/apt/lists/* \
+    && userdel --remove ubuntu \
+    && groupadd --gid 1000 skyfire \
+    && useradd --uid 1000 --gid skyfire --home-dir /opt/skyfire-server --shell /usr/sbin/nologin skyfire
+
+COPY --from=builder /opt/openssl-4.0.0 /opt/openssl-4.0.0
+COPY --from=builder /opt/boost-1_91_0 /opt/boost-1_91_0
+COPY --from=builder --chown=1000:1000 /opt/skyfire-server /opt/skyfire-server
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+USER skyfire
+
+EXPOSE 3724 8085
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

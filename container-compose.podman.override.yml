@@ -1,0 +1,19 @@
+# Override file for podman-compose (SELinux mounts and userid mappings)
+services:
+
+  worldserver:
+    userns_mode: keep-id
+    volumes:
+      - ./etc:/opt/skyfire-server/etc:z
+      - ${CLIENT_DATA_VOL:-./data}:/opt/skyfire-server/data:Z
+
+  authserver:
+    userns_mode: keep-id
+    volumes:
+      - ./etc:/opt/skyfire-server/etc:z
+
+  extractors:
+    userns_mode: keep-id
+    volumes:
+      #- /path/to/client:/client:Z
+      - ${CLIENT_DATA_VOL:-./data}:/opt/skyfire-server/data:Z

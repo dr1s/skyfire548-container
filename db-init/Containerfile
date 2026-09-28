@@ -1,0 +1,40 @@
+FROM ubuntu:24.04
+
+ENV debian_frontend=noninteractive
+
+ARG SOURCE_REPO=https://github.com/ProjectSkyfire/SkyFire_548.git
+ARG SOURCE_BRANCH=main
+ARG SOURCE_COMMIT=""
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    default-mysql-client \
+    jq \
+    curl \
+    unzip \
+    ca-certificates \
+    git \
+    tini \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /var/lib/skyfire-init
+
+RUN git clone --no-checkout --depth=1 --filter=tree:0 "${SOURCE_REPO}" --branch "${SOURCE_BRANCH}" /tmp/src \
+    && git -C /tmp/src sparse-checkout set --no-cone /sql \
+    && git -C /tmp/src checkout \
+    && cp -r /tmp/src/sql/ /opt/skyfire-sql/ \
+    && rm -rf /tmp/src
+
+RUN set -eux; \
+    curl -fsSL https://api.github.com/repos/ProjectSkyfire/SkyFire_548/releases/latest -o /opt/skyfire-sql/base/world.json; \
+    RELEASE_NAME="$(jq -r '.assets[0].name' /opt/skyfire-sql/base/world.json)"; \
+    RELEASE_NAME="${RELEASE_NAME%.zip}"; \
+    RELEASE_URL="$(jq -r '.assets[0].browser_download_url' /opt/skyfire-sql/base/world.json)"; \
+    curl -fsSL "${RELEASE_URL}" -o "/opt/skyfire-sql/${RELEASE_NAME}.zip"; \
+    unzip -q "/opt/skyfire-sql/${RELEASE_NAME}.zip" -d /opt/skyfire-sql; \
+    mv "/opt/skyfire-sql/${RELEASE_NAME}.sql" /opt/skyfire-sql/base/world.sql; \
+    rm "/opt/skyfire-sql/${RELEASE_NAME}.zip"
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

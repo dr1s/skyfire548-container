@@ -1,0 +1,106 @@
+services:
+  db:
+    container_name: db
+    image: docker.io/library/mysql:9.7
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - ${DB_DATA_VOL:-dbdata}:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  db-init:
+    container_name: db-init
+    image: ${SKYFIRE_DBINIT_IMAGE:-ghcr.io/dr1s/skyfire548-db-init:latest}
+    build:
+      context: db-init
+      dockerfile: Containerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - init-marker:/var/lib/skyfire-init
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+
+  worldserver:
+    container_name: worldserver
+    image: ${SKYFIRE_SERVER_IMAGE:-ghcr.io/dr1s/skyfire548-server:latest}
+    build:
+      context: server
+      dockerfile: Containerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: always
+    ports:
+      - "8085:8085"
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./etc:/opt/skyfire-server/etc
+      - ${CLIENT_DATA_VOL:-client-data}:/opt/skyfire-server/data
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    command: ['worldserver']
+
+  authserver:
+    container_name: authserver
+    image: ${SKYFIRE_SERVER_IMAGE:-ghcr.io/dr1s/skyfire548-server:latest}
+    depends_on:
+      db:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
+    restart: always
+    ports:
+      - "3724:3724"
+    volumes:
+      - ./etc:/opt/skyfire-server/etc
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    command: ['authserver']
+
+  extractors:
+    container_name: extractors
+    image: ${SKYFIRE_SERVER_IMAGE:-ghcr.io/dr1s/skyfire548-server:latest}
+    profiles:
+      - extractors
+    volumes:
+      #- /path/to/client:/client:Z
+      - ${CLIENT_DATA_VOL:-client-data}:/opt/skyfire-server/data
+    command: ['extractors']
+
+
+volumes:
+  dbdata:
+  client-data:
+  init-marker:
