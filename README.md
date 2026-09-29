@@ -6,7 +6,7 @@ Containerized deployment of [Project SkyFire 5.4.8](https://github.com/ProjectSk
 
 This repository provides container images and compose files to run a complete SkyFire 5.4.8 server stack:
 
-- **db** — MySQL 8.4 database server
+- **db** — MySQL 9.7 database server
 - **db-init** — One-shot initializer that creates databases, imports base SQL, and applies updates
 - **worldserver** — The main game world server
 - **authserver** — Authentication/login server
@@ -31,19 +31,27 @@ Pre-built images are available on GitHub Container Registry:
    cp .env.example .env
    ```
 
-2. Start the database and wait for the one-shot `db-init` service to complete:
+2. (Podman only) Rename the Podman override file so Compose picks it up automatically:
+
+   ```bash
+   cp container-compose.podman.override.yml container-compose.override.yml
+   ```
+
+   Docker users can skip this step.
+
+3. Start the database and wait for the one-shot `db-init` service to complete:
 
    ```bash
    docker compose -f container-compose.yml up db-init
    ```
 
-3. Start the auth and world servers:
+4. Start the auth and world servers:
 
    ```bash
    docker compose -f container-compose.yml up -d authserver worldserver
    ```
 
-On Podman/rootless setups the included `container-compose.override.yml` is loaded automatically and configures `userns_mode: keep-id` and the correct SELinux volume labels.
+   On Podman/rootless setups the override file configures `userns_mode: keep-id` and the correct SELinux volume labels.
 
 ## Configuration
 
@@ -53,14 +61,11 @@ All configuration is done through environment variables in `.env`:
 |----------|---------|-------------|
 | `SKYFIRE_SERVER_IMAGE` | `localhost/dr1s/skyfire548-server:latest` | Image used for `worldserver`, `authserver`, and `extractors` |
 | `SKYFIRE_DBINIT_IMAGE` | `localhost/dr1s/skyfire548-db-init:latest` | Image used for the `db-init` service |
-| `MYSQL_USER` | `skyfire` | MySQL application user |
-| `MYSQL_PASSWORD` | `skyfire` | MySQL application password |
-| `MYSQL_ROOT_PASSWORD` | `skyfire` | MySQL root password |
 | `DB_HOST` | `db` | Hostname of the database service |
 | `DB_PORT` | `3306` | Database port |
-| `DB_USER` | `skyfire` | Database user used by the server |
-| `DB_PASSWORD` | `skyfire` | Database password used by the server |
-| `DB_ROOT_PASSWORD` | `skyfire` | Root password used by `db-init` |
+| `DB_USER` | `skyfire` | Database user used by the server and created in MySQL |
+| `DB_PASSWORD` | `skyfire` | Database password used by the server and set in MySQL |
+| `DB_ROOT_PASSWORD` | `skyfire` | MySQL root password used by `db-init` |
 | `DB_DATA_VOL` | `dbdata` | Volume/path for MySQL data |
 | `CLIENT_DATA_VOL` | `./data` | Volume/path for client extracted data |
 
@@ -80,7 +85,7 @@ Use the optional `extractors` profile to extract data from a mounted WoW 5.4.8 c
 docker compose -f container-compose.yml --profile extractors run --rm extractors
 ```
 
-Before running, uncomment and set the client mount in `container-compose.override.yml`:
+Before running, uncomment and set the client mount in your override file (`container-compose.override.yml` on Podman, or create your own `container-compose.override.yml` on Docker):
 
 ```yaml
 services:

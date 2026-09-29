@@ -10,8 +10,9 @@ DB_PORT="${DB_PORT:-3306}"
 
 : "${DB_USER:?Environment variable DB_USER must be set}"
 : "${DB_PASSWORD:?Environment variable DB_PASSWORD must be set}"
+: "${DB_ROOT_PASSWORD:?Environment variable DB_ROOT_PASSWORD must be set}"
 
-export MYSQL_PWD="${DB_PASSWORD}"
+export MYSQL_PWD="${DB_ROOT_PASSWORD}"
 
 MARKER_DIR="${INIT_MARKER_DIR:-/var/lib/skyfire-init}"
 MARKER_FILE="${MARKER_DIR}/initialized"
