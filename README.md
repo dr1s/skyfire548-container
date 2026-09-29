@@ -66,8 +66,10 @@ All configuration is done through environment variables in `.env`:
 | `DB_USER` | `skyfire` | Database user used by the server and created in MySQL |
 | `DB_PASSWORD` | `skyfire` | Database password used by the server and set in MySQL |
 | `DB_ROOT_PASSWORD` | `skyfire` | MySQL root password used by `db-init` |
+| `WORLD_IP` | *(unset)* | When set, updates `auth.realmlist.address` to this IP on startup |
+| `WORLD_NAME` | *(unset)* | When set, updates `auth.realmlist.name` on startup |
 | `DB_DATA_VOL` | `dbdata` | Volume/path for MySQL data |
-| `CLIENT_DATA_VOL` | `./data` | Volume/path for client extracted data |
+| `CLIENT_DATA_VOL` | `client-data` | Volume/path for client extracted data |
 
 ### Volumes
 

@@ -7,6 +7,8 @@ DB_WORLD="${DB_WORLD:-world}"
 DB_CHAR="${DB_CHAR:-characters}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-3306}"
+WORLD_IP="${WORLD_IP:-}"
+WORLD_NAME="${WORLD_NAME:-}"
 
 : "${DB_USER:?Environment variable DB_USER must be set}"
 : "${DB_PASSWORD:?Environment variable DB_PASSWORD must be set}"
@@ -103,6 +105,29 @@ grant_privileges(){
                     FLUSH PRIVILEGES;"
 }
 
+# --- Refresh realmlist address/name when WORLD_IP/WORLD_NAME is provided ---
+refresh_realmlist(){
+    if [ -z "${WORLD_IP}" ] && [ -z "${WORLD_NAME}" ]; then
+        return 0
+    fi
+
+    local set_clause=""
+    if [ -n "${WORLD_IP}" ]; then
+        log "Updating realmlist address to: ${WORLD_IP}"
+        set_clause="\`address\` = '${WORLD_IP}'"
+    fi
+    if [ -n "${WORLD_NAME}" ]; then
+        log "Updating realmlist name to: ${WORLD_NAME}"
+        if [ -n "${set_clause}" ]; then
+            set_clause="${set_clause}, \`name\` = '${WORLD_NAME}'"
+        else
+            set_clause="\`name\` = '${WORLD_NAME}'"
+        fi
+    fi
+
+    mysql_exec "${DB_LOGIN}" -e "UPDATE \`realmlist\` SET ${set_clause};"
+}
+
 # --- Apply database updates idempotently ---
 apply_db_updates(){
     local db="${1}"
@@ -172,6 +197,12 @@ log "User:     ${DB_USER}"
 log "Login DB: ${DB_LOGIN}"
 log "World DB: ${DB_WORLD}"
 log "Char DB:  ${DB_CHAR}"
+if [ -n "${WORLD_IP}" ]; then
+    log "World IP: ${WORLD_IP}"
+fi
+if [ -n "${WORLD_NAME}" ]; then
+    log "World Name: ${WORLD_NAME}"
+fi
 
 determine_db_command
 
@@ -181,6 +212,7 @@ if [ -f "${MARKER_FILE}" ]; then
     log "Release tag:  ${CURRENT_RELEASE_TAG}"
     log "Checking for database updates"
     wait_for_db
+    refresh_realmlist
     apply_all_db_updates
     exit 0
 fi
@@ -193,6 +225,8 @@ create_auth_db
 grant_privileges
 
 import_base_sql
+
+refresh_realmlist
 
 if [ ! -f "${SQL_DIR}/base/world.json" ]; then
     die "world.json not found at ${SQL_DIR}/base/world.json"
