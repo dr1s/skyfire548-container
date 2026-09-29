@@ -66,6 +66,12 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
     command: ['worldserver']
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/8085"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
 
   authserver:
     container_name: authserver
@@ -88,6 +94,12 @@ services:
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
     command: ['authserver']
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/localhost/3724"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   extractors:
     container_name: extractors
